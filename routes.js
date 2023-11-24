@@ -1,104 +1,113 @@
-const express = require('express')
-const { findByEmail, save, updateLastLogin, findByID } = require('./implementations/mongoRepository')
-const { encrypt, comparePass, configureJWT, validUser } = require('./providers/implementations/bcrypt')
-const router = express.Router()
+const express = require("express");
+const {
+  findByEmail,
+  save,
+  updateLastLogin,
+  findByID,
+} = require("./database/implementations/mongoRepository");
 
-router.post('/login', async (req, res) => {
-    const { email, password } = req.body
+const { encrypt, comparePass } = require("./providers/implementations/bcrypt");
+const {
+  configureJWT,
+  validUser,
+} = require("./providers/implementations/jsonwebtoken");
 
-    const userAlreadyExist = await findByEmail(email)
-    if(!userAlreadyExist) {
-        return res.status(404).json(
-            {"message": "Usúario e/ou senha inválidos"}
-        )
-    }
+const router = express.Router();
 
-    const validPass = await comparePass(email, password)
-    if(!validPass) {
-        return res.status(404).json(
-            {"message": "Usuário e/ou senha inválidos"}
-        )
-    }
-    const token = await configureJWT(email)
-    const updatedUser = await updateLastLogin(email)
-    return res.status(201).json(
-        {
-            id: updatedUser._id,
-            createdAt: updatedUser.createdAt,
-            updatedDate: updatedUser.updateDate,
-            lastLogin: updatedUser.lastLogin,
-            token,
-        }
-    )
-})
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
-router.post('/register', async (req, res) => {
-    const { email, password, name, number, ddd } = req.body
-    const date = new Date()
-    const actualDate = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`
+  const userAlreadyExist = await findByEmail(email);
+  if (!userAlreadyExist) {
+    return res.status(404).json({ message: "Usúario e/ou senha inválidos" });
+  }
 
-    const userAlreadyExist = await findByEmail(email)
-    if(userAlreadyExist) {
-        return res.status(400).json(
-            {"message": "Email já existente"}
-        )
-    }
+  const validPass = await comparePass(email, password);
+  if (!validPass) {
+    return res.status(404).json({ message: "Usuário e/ou senha inválidos" });
+  }
 
-    const encryptedPass = await encrypt(password)
-    const token = await configureJWT(email)
+  const token = await configureJWT(email);
+  const updatedUser = await updateLastLogin(email);
+  return res.status(200).json({
+    // eslint-disable-next-line no-underscore-dangle
+    id: updatedUser._id,
+    createdAt: updatedUser.createdAt,
+    updatedDate: updatedUser.updateDate,
+    lastLogin: updatedUser.lastLogin,
+    token,
+  });
+});
 
-    const userData = {
-        email,
-        phones: [
-            {number, ddd}
-        ],
-        name,
-        password: encryptedPass,
-        createdAt: actualDate,
-        lastLogin: actualDate,
-        updateDate: actualDate
-    }
-    const newUser = await save(userData)
+router.post("/register", async (req, res) => {
+  const { email, password, name, number, ddd } = req.body;
+  const date = new Date();
+  const actualDate = `${date.getDate()}/${
+    date.getMonth() + 1
+  }/${date.getFullYear()}`;
 
-    return res.status(200).json(
-        {
-            id: newUser._id, 
-            createdAt: newUser.createdAt, 
-            lastLogin: newUser.lastLogin, 
-            updateDate: newUser.updateDate,
-            token
-        }
-    )
-})
+  const userAlreadyExist = await findByEmail(email);
+  if (userAlreadyExist) {
+    return res.status(400).json({ message: "Email já existente" });
+  }
 
-router.get('/user/:id', async (req, res) => {
-    if(!req.headers.authorization) {
-        return res.status(405).json({"message": "Não autorizado"})
-    }
+  const encryptedPass = await encrypt(password);
+  const token = await configureJWT(email);
 
-    if(!validUser(req.headers.authorization)) {
-        return res.status(405).json({"message": "Não autorizado"})
-    }
+  const userData = {
+    email,
+    phones: [{ number, ddd }],
+    name,
+    password: encryptedPass,
+    createdAt: actualDate,
+    lastLogin: actualDate,
+    updateDate: actualDate,
+  };
 
-    if(!req.headers.token) {
-        return res.status(405).json({"message": "Sessão inválida"})
-    }
+  const newUser = await save(userData);
 
-    if(!validUser(req.headers.token)) {
-        res.status(405).json({"message": "Sessão inválida"})
-    }
+  return res.status(201).json({
+    // eslint-disable-next-line no-underscore-dangle
+    id: newUser._id,
+    createdAt: newUser.createdAt,
+    lastLogin: newUser.lastLogin,
+    updateDate: newUser.updateDate,
+    token,
+  });
+});
 
-    const { id } = req.params
+router.get("/user/:id", async (req, res) => {
+  if (!req.headers.authorization) {
+    return res.status(405).json({ message: "Não autorizado" });
+  }
 
-    const user = await findByID(id)
-    return res.status(200).json(
-        {
-            id: user._id,
-            createdAt: user.createdAt,
-            updateDate: user.updateDate,
-            lastLogin: user.lastLogin
-        }
-    )
-})
+  if (!validUser(req.headers.authorization)) {
+    return res.status(405).json({ message: "Não autorizado" });
+  }
 
-module.exports = router
+  if (!req.headers.token) {
+    return res.status(405).json({ message: "Sessão inválida" });
+  }
+
+  if (!validUser(req.headers.token)) {
+    res.status(405).json({ message: "Sessão inválida" });
+  }
+
+  const { id } = req.params;
+  try {
+    const user = await findByID(id);
+    return res.status(200).json({
+      // eslint-disable-next-line no-underscore-dangle
+      id: user._id,
+      createdAt: user.createdAt,
+      updateDate: user.updateDate,
+      lastLogin: user.lastLogin,
+    });
+  } catch (error) {
+    return res
+      .status(404)
+      .json({ message: error.message || "Unexpected error" });
+  }
+});
+
+module.exports = router;
